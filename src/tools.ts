@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Tool } from "./types.js";
 
@@ -44,6 +44,28 @@ export const writeFile: Tool<{ path: string; content: string }> = {
   },
 };
 
+export const listDir: Tool<{ path: string }> = {
+  name: "list_dir",
+  description: "List files and directories in the given path",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Directory path to list" },
+    },
+    required: ["path"],
+  },
+  async execute({ path }) {
+    try {
+      const entries = readdirSync(path, { withFileTypes: true });
+      return entries
+        .map((entry) => `${entry.isDirectory() ? "[DIR]" : "[FILE]"} ${entry.name}`)
+        .join("\n");
+    } catch (e) {
+      return `Error listing directory: ${(e as Error).message}`;
+    }
+  },
+};
+
 export const bash: Tool<{ command: string }> = {
   name: "bash",
   description:
@@ -71,4 +93,4 @@ export const bash: Tool<{ command: string }> = {
   },
 };
 
-export const defaultTools: Tool[] = [readFile, writeFile, bash];
+export const defaultTools: Tool[] = [readFile, writeFile, listDir, bash];
