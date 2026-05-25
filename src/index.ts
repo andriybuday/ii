@@ -4,7 +4,7 @@ import { Agent } from "./agent.js";
 import { defaultTools } from "./tools.js";
 
 const SYSTEM_PROMPT = `You are ii, a minimalist AI coding agent running in the terminal.
-You have tools to read files, write files, and run shell commands.
+You have tools to read files, write files, edit files, list directories, and run shell commands.
 Work directory: ${process.cwd()}
 Be concise. Use tools to inspect and modify code directly rather than explaining what you would do.`;
 

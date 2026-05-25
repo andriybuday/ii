@@ -93,4 +93,46 @@ export const bash: Tool<{ command: string }> = {
   },
 };
 
-export const defaultTools: Tool[] = [readFile, writeFile, listDir, bash];
+export const editFile: Tool<{
+  path: string;
+  old_string: string;
+  new_string: string;
+  replace_all?: boolean;
+}> = {
+  name: "edit_file",
+  description:
+    "Edit a file by replacing text. Provide the exact old_string to replace with new_string. Set replace_all to true to replace all occurrences.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "File path to edit" },
+      old_string: { type: "string", description: "Exact text to find and replace" },
+      new_string: { type: "string", description: "Replacement text" },
+      replace_all: {
+        type: "boolean",
+        description: "Replace all occurrences (default false)",
+      },
+    },
+    required: ["path", "old_string", "new_string"],
+  },
+  async execute({ path, old_string, new_string, replace_all }) {
+    try {
+      const content = readFileSync(path, "utf-8");
+      if (!content.includes(old_string)) {
+        return `Error: old_string not found in ${path}`;
+      }
+      const newContent = replace_all
+        ? content.split(old_string).join(new_string)
+        : content.replace(old_string, new_string);
+      writeFileSync(path, newContent, "utf-8");
+      const count = replace_all
+        ? content.split(old_string).length - 1
+        : 1;
+      return `Edited ${path}: replaced ${count} occurrence(s)`;
+    } catch (e) {
+      return `Error editing file: ${(e as Error).message}`;
+    }
+  },
+};
+
+export const defaultTools: Tool[] = [readFile, writeFile, listDir, bash, editFile];
