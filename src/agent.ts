@@ -20,17 +20,25 @@ export class Agent {
     this.history.push({ role: "user", content: userMessage });
 
     for (let i = 0; i < this.MAX_ITERATIONS; i++) {
-      const response = await this.client.messages.create({
-        model: MODEL,
-        max_tokens: 8096,
-        system: this.systemPrompt,
-        messages: this.history,
-        tools: this.tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
-        })),
-      });
+      let response: Anthropic.Message;
+      try {
+        response = await this.client.messages.create({
+          model: MODEL,
+          max_tokens: 8096,
+          system: this.systemPrompt,
+          messages: this.history,
+          tools: this.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
+          })),
+        });
+      } catch (e) {
+        const errorMsg = `API Error: ${(e as Error).message}`;
+        this.history.push({ role: "assistant", content: errorMsg });
+        onText?.(errorMsg);
+        return errorMsg;
+      }
 
       this.history.push({ role: "assistant", content: response.content });
 
