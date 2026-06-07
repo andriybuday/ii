@@ -11,24 +11,6 @@ import type { Tool } from "./types.js";
 export { Agent, defaultTools, loadToolsFromDirectory };
 export type { Tool };
 
-function loadAgentsMd(): string {
-  try {
-    const agentsMdPath = join(process.cwd(), "AGENTS.md");
-    if (existsSync(agentsMdPath)) {
-      const content = readFileSync(agentsMdPath, "utf-8");
-      return `\n\n# Project Instructions (from AGENTS.md)\n\n${content}`;
-    }
-  } catch (e) {
-    // Silently ignore errors reading AGENTS.md
-  }
-  return "";
-}
-
-const SYSTEM_PROMPT = `You are ii, a minimalist AI coding agent running in the terminal.
-You have tools to read files, write files, edit files, list directories, and run shell commands.
-Work directory: ${process.cwd()}
-Be concise. Use tools to inspect and modify code directly rather than explaining what you would do.${loadAgentsMd()}`;
-
 // Run CLI only if this file is executed directly (not imported)
 const isMainModule = (() => {
   try {
@@ -41,6 +23,24 @@ const isMainModule = (() => {
 })();
 
 if (isMainModule) {
+  function loadAgentsMd(): string {
+    try {
+      const agentsMdPath = join(process.cwd(), "AGENTS.md");
+      if (existsSync(agentsMdPath)) {
+        const content = readFileSync(agentsMdPath, "utf-8");
+        return `\n\n# Project Instructions (from AGENTS.md)\n\n${content}`;
+      }
+    } catch (e) {
+      // Silently ignore errors reading AGENTS.md
+    }
+    return "";
+  }
+
+  const SYSTEM_PROMPT = `You are ii, a minimalist AI coding agent running in the terminal.
+You have tools to read files, write files, edit files, list directories, and run shell commands.
+Work directory: ${process.cwd()}
+Be concise. Use tools to inspect and modify code directly rather than explaining what you would do.${loadAgentsMd()}`;
+
   // Load custom tools from II_TOOLS_DIR if set
   let tools = [...defaultTools];
   const toolsDir = process.env.II_TOOLS_DIR;
