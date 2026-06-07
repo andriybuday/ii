@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import * as readline from "node:readline";
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Agent } from "./agent.js";
 import { defaultTools, loadToolsFromDirectory } from "./tools.js";
 import type { Tool } from "./types.js";
@@ -29,7 +30,17 @@ Work directory: ${process.cwd()}
 Be concise. Use tools to inspect and modify code directly rather than explaining what you would do.${loadAgentsMd()}`;
 
 // Run CLI only if this file is executed directly (not imported)
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isMainModule = (() => {
+  try {
+    const modulePath = fileURLToPath(import.meta.url);
+    const scriptPath = process.argv[1] ? resolve(process.argv[1]) : "";
+    return modulePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMainModule) {
   // Load custom tools from II_TOOLS_DIR if set
   let tools = [...defaultTools];
   const toolsDir = process.env.II_TOOLS_DIR;
