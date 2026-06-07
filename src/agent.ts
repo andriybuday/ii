@@ -7,6 +7,8 @@ export class Agent {
   private history: Anthropic.MessageParam[] = [];
   private client = new Anthropic();
   private readonly MAX_ITERATIONS = 50;
+  private totalInputTokens = 0;
+  private totalOutputTokens = 0;
 
   constructor(
     private systemPrompt: string,
@@ -38,6 +40,13 @@ export class Agent {
         this.history.push({ role: "assistant", content: errorMsg });
         onText?.(errorMsg);
         return errorMsg;
+      }
+
+      // Track token usage
+      if (response.usage) {
+        this.totalInputTokens += response.usage.input_tokens;
+        this.totalOutputTokens += response.usage.output_tokens;
+        console.error(`[tokens] input: ${response.usage.input_tokens}, output: ${response.usage.output_tokens}, total: ${this.totalInputTokens + this.totalOutputTokens}`);
       }
 
       this.history.push({ role: "assistant", content: response.content });
@@ -86,5 +95,15 @@ export class Agent {
 
   clearHistory() {
     this.history = [];
+    this.totalInputTokens = 0;
+    this.totalOutputTokens = 0;
+  }
+
+  getTokenUsage() {
+    return {
+      inputTokens: this.totalInputTokens,
+      outputTokens: this.totalOutputTokens,
+      totalTokens: this.totalInputTokens + this.totalOutputTokens,
+    };
   }
 }
