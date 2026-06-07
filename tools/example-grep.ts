@@ -17,6 +17,11 @@ function truncateOutput(output: string): string {
   return output;
 }
 
+function shellEscape(arg: string): string {
+  // Escape single quotes by closing, escaping, and reopening
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 export const grep: Tool<{ pattern: string; path?: string }> = {
   name: "grep",
   description: "Search for text patterns in files using ripgrep or grep",
@@ -38,11 +43,13 @@ export const grep: Tool<{ pattern: string; path?: string }> = {
     try {
       // Try ripgrep first (faster), fall back to grep
       let command: string;
+      const escapedPattern = shellEscape(pattern);
+      const escapedPath = shellEscape(path);
       try {
         execSync("which rg", { stdio: "ignore" });
-        command = `rg -n "${pattern}" ${path} 2>/dev/null | head -50`;
+        command = `rg -n ${escapedPattern} ${escapedPath} 2>/dev/null | head -50`;
       } catch {
-        command = `grep -rn "${pattern}" ${path} 2>/dev/null | head -50`;
+        command = `grep -rn ${escapedPattern} ${escapedPath} 2>/dev/null | head -50`;
       }
       
       const output = execSync(command, {
