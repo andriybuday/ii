@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Tool } from "./types.js";
 
-const MODEL = "claude-sonnet-4-5";
+const MODEL = process.env.II_MODEL || "claude-sonnet-4-5";
 
 export class Agent {
   private history: Anthropic.MessageParam[] = [];
