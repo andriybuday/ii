@@ -12,6 +12,15 @@ function validatePath(inputPath: string): string | null {
   return null;
 }
 
+const MAX_OUTPUT_SIZE = 10000;
+
+function truncateOutput(output: string): string {
+  if (output.length > MAX_OUTPUT_SIZE) {
+    return output.slice(0, MAX_OUTPUT_SIZE) + `\n... (truncated ${output.length - MAX_OUTPUT_SIZE} characters)`;
+  }
+  return output;
+}
+
 export const readFile: Tool<{ path: string }> = {
   name: "read_file",
   description: "Read the contents of a file at the given path",
@@ -26,7 +35,8 @@ export const readFile: Tool<{ path: string }> = {
     const validationError = validatePath(path);
     if (validationError) return validationError;
     try {
-      return readFileSync(path, "utf-8");
+      const content = readFileSync(path, "utf-8");
+      return truncateOutput(content);
     } catch (e) {
       return `Error reading file: ${(e as Error).message}`;
     }
@@ -50,9 +60,9 @@ export const writeFile: Tool<{ path: string; content: string }> = {
     try {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, content, "utf-8");
-      return `Wrote ${content.length} bytes to ${path}`;
+      return truncateOutput(`Wrote ${content.length} bytes to ${path}`);
     } catch (e) {
-      return `Error writing file: ${(e as Error).message}`;
+      return truncateOutput(`Error writing file: ${(e as Error).message}`);
     }
   },
 };
@@ -72,9 +82,10 @@ export const listDir: Tool<{ path: string }> = {
     if (validationError) return validationError;
     try {
       const entries = readdirSync(path, { withFileTypes: true });
-      return entries
+      const output = entries
         .map((entry) => `${entry.isDirectory() ? "[DIR]" : "[FILE]"} ${entry.name}`)
         .join("\n");
+      return truncateOutput(output);
     } catch (e) {
       return `Error listing directory: ${(e as Error).message}`;
     }
@@ -99,11 +110,11 @@ export const bash: Tool<{ command: string }> = {
         timeout: 30_000,
         stdio: ["pipe", "pipe", "pipe"],
       });
-      return output || "(no output)";
+      return truncateOutput(output || "(no output)");
     } catch (e: unknown) {
       const err = e as { stdout?: string; stderr?: string; message: string };
       const out = [err.stdout, err.stderr, err.message].filter(Boolean).join("\n");
-      return `Error:\n${out}`;
+      return truncateOutput(`Error:\n${out}`);
     }
   },
 };
@@ -136,7 +147,7 @@ export const editFile: Tool<{
     try {
       const content = readFileSync(path, "utf-8");
       if (!content.includes(old_string)) {
-        return `Error: old_string not found in ${path}`;
+        return truncateOutput(`Error: old_string not found in ${path}`);
       }
       const newContent = replace_all
         ? content.split(old_string).join(new_string)
@@ -145,9 +156,9 @@ export const editFile: Tool<{
       const count = replace_all
         ? content.split(old_string).length - 1
         : 1;
-      return `Edited ${path}: replaced ${count} occurrence(s)`;
+      return truncateOutput(`Edited ${path}: replaced ${count} occurrence(s)`);
     } catch (e) {
-      return `Error editing file: ${(e as Error).message}`;
+      return truncateOutput(`Error editing file: ${(e as Error).message}`);
     }
   },
 };
