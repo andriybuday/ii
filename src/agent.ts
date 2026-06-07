@@ -83,12 +83,21 @@ export class Agent {
                 is_error: true,
               };
             }
-            const result = await tool.execute(block.input as never);
-            return {
-              type: "tool_result" as const,
-              tool_use_id: block.id,
-              content: result,
-            };
+            try {
+              const result = await tool.execute(block.input as never);
+              return {
+                type: "tool_result" as const,
+                tool_use_id: block.id,
+                content: result,
+              };
+            } catch (e) {
+              return {
+                type: "tool_result" as const,
+                tool_use_id: block.id,
+                content: `Tool execution error: ${(e as Error).message}`,
+                is_error: true,
+              };
+            }
           })
         );
 
