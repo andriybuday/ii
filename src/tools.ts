@@ -190,9 +190,15 @@ export async function loadToolsFromDirectory(dirPath: string): Promise<Tool[]> {
       try {
         const module = await import(fileUrl);
         
-        // Collect all exported values that look like Tools (have a name property)
+        // Collect all exported values that look like Tools (have name and execute)
         for (const exported of Object.values(module)) {
-          if (exported && typeof exported === "object" && "name" in exported) {
+          if (
+            exported &&
+            typeof exported === "object" &&
+            "name" in exported &&
+            "execute" in exported &&
+            typeof (exported as any).execute === "function"
+          ) {
             tools.push(exported as Tool);
           }
         }
