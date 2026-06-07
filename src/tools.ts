@@ -1,7 +1,16 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { Tool } from "./types.js";
+
+function validatePath(inputPath: string): string | null {
+  const resolved = resolve(inputPath);
+  const cwd = process.cwd();
+  if (!resolved.startsWith(cwd + "/") && resolved !== cwd) {
+    return `Error: Path "${inputPath}" is outside the working directory`;
+  }
+  return null;
+}
 
 export const readFile: Tool<{ path: string }> = {
   name: "read_file",
@@ -14,6 +23,8 @@ export const readFile: Tool<{ path: string }> = {
     required: ["path"],
   },
   async execute({ path }) {
+    const validationError = validatePath(path);
+    if (validationError) return validationError;
     try {
       return readFileSync(path, "utf-8");
     } catch (e) {
@@ -34,6 +45,8 @@ export const writeFile: Tool<{ path: string; content: string }> = {
     required: ["path", "content"],
   },
   async execute({ path, content }) {
+    const validationError = validatePath(path);
+    if (validationError) return validationError;
     try {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, content, "utf-8");
@@ -55,6 +68,8 @@ export const listDir: Tool<{ path: string }> = {
     required: ["path"],
   },
   async execute({ path }) {
+    const validationError = validatePath(path);
+    if (validationError) return validationError;
     try {
       const entries = readdirSync(path, { withFileTypes: true });
       return entries
@@ -116,6 +131,8 @@ export const editFile: Tool<{
     required: ["path", "old_string", "new_string"],
   },
   async execute({ path, old_string, new_string, replace_all }) {
+    const validationError = validatePath(path);
+    if (validationError) return validationError;
     try {
       const content = readFileSync(path, "utf-8");
       if (!content.includes(old_string)) {
