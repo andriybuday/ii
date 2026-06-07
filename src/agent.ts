@@ -6,6 +6,7 @@ const MODEL = "claude-sonnet-4-5";
 export class Agent {
   private history: Anthropic.MessageParam[] = [];
   private client = new Anthropic();
+  private readonly MAX_ITERATIONS = 50;
 
   constructor(
     private systemPrompt: string,
@@ -18,7 +19,7 @@ export class Agent {
   ): Promise<string> {
     this.history.push({ role: "user", content: userMessage });
 
-    while (true) {
+    for (let i = 0; i < this.MAX_ITERATIONS; i++) {
       const response = await this.client.messages.create({
         model: MODEL,
         max_tokens: 8096,
@@ -71,6 +72,8 @@ export class Agent {
         this.history.push({ role: "user", content: toolResults });
       }
     }
+
+    throw new Error(`Agent exceeded maximum iterations (${this.MAX_ITERATIONS}). The model may be stuck in a loop.`);
   }
 
   clearHistory() {
