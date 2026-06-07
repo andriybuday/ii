@@ -47,7 +47,18 @@ if (isMainModule) {
   if (toolsDir) {
     try {
       const customTools = await loadToolsFromDirectory(toolsDir);
-      tools.push(...customTools);
+      // Deduplicate by name: custom tools override built-ins
+      const toolMap = new Map<string, typeof tools[0]>();
+      for (const tool of tools) {
+        toolMap.set(tool.name, tool);
+      }
+      for (const tool of customTools) {
+        if (toolMap.has(tool.name)) {
+          console.error(`Warning: Custom tool "${tool.name}" overrides built-in tool`);
+        }
+        toolMap.set(tool.name, tool);
+      }
+      tools = Array.from(toolMap.values());
       console.error(`Loaded ${customTools.length} custom tool(s) from ${toolsDir}`);
     } catch (e) {
       console.error(`Warning: Failed to load custom tools: ${(e as Error).message}`);
