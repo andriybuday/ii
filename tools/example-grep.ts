@@ -8,6 +8,15 @@ import type { Tool } from "../src/types.js";
  * Copy this file to create your own custom tools.
  */
 
+const MAX_OUTPUT_SIZE = 10000;
+
+function truncateOutput(output: string): string {
+  if (output.length > MAX_OUTPUT_SIZE) {
+    return output.slice(0, MAX_OUTPUT_SIZE) + `\n... (truncated ${output.length - MAX_OUTPUT_SIZE} characters)`;
+  }
+  return output;
+}
+
 export const grep: Tool<{ pattern: string; path?: string }> = {
   name: "grep",
   description: "Search for text patterns in files using ripgrep or grep",
@@ -41,9 +50,9 @@ export const grep: Tool<{ pattern: string; path?: string }> = {
         timeout: 10_000,
       });
       
-      return output || "(no matches found)";
+      return truncateOutput(output || "(no matches found)");
     } catch (e) {
-      return `Error searching: ${(e as Error).message}`;
+      return truncateOutput(`Error searching: ${(e as Error).message}`);
     }
   },
 };

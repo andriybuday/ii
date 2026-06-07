@@ -8,6 +8,15 @@ import type { Tool } from "../src/types.js";
  * Demonstrates how to create a simple wrapper around a CLI command.
  */
 
+const MAX_OUTPUT_SIZE = 10000;
+
+function truncateOutput(output: string): string {
+  if (output.length > MAX_OUTPUT_SIZE) {
+    return output.slice(0, MAX_OUTPUT_SIZE) + `\n... (truncated ${output.length - MAX_OUTPUT_SIZE} characters)`;
+  }
+  return output;
+}
+
 export const gitStatus: Tool<{ }> = {
   name: "git_status",
   description: "Show git repository status (modified files, branch, etc.)",
@@ -27,9 +36,9 @@ export const gitStatus: Tool<{ }> = {
         return "Working tree clean";
       }
       
-      return output;
+      return truncateOutput(output);
     } catch (e) {
-      return `Error: Not a git repository or git not installed`;
+      return truncateOutput(`Error: Not a git repository or git not installed`);
     }
   },
 };
@@ -62,9 +71,9 @@ export const gitDiff: Tool<{ staged?: boolean }> = {
         maxBuffer: 1024 * 1024, // 1MB max
       });
       
-      return output || "(no changes)";
+      return truncateOutput(output || "(no changes)");
     } catch (e) {
-      return `Error getting diff: ${(e as Error).message}`;
+      return truncateOutput(`Error getting diff: ${(e as Error).message}`);
     }
   },
 };
