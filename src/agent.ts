@@ -75,9 +75,15 @@ export class Agent {
         const toolResults = await Promise.all(
           toolUseBlocks.map(async (block) => {
             const tool = this.tools.find((t) => t.name === block.name);
-            const result = tool
-              ? await tool.execute(block.input as never)
-              : `Tool "${block.name}" not found`;
+            if (!tool) {
+              return {
+                type: "tool_result" as const,
+                tool_use_id: block.id,
+                content: `Tool "${block.name}" not found`,
+                is_error: true,
+              };
+            }
+            const result = await tool.execute(block.input as never);
             return {
               type: "tool_result" as const,
               tool_use_id: block.id,
