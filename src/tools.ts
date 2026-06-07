@@ -164,3 +164,45 @@ export const editFile: Tool<{
 };
 
 export const defaultTools: Tool[] = [readFile, writeFile, listDir, bash, editFile];
+
+/**
+ * Load custom tools from a directory.
+ * Each .ts or .js file is imported, and all exported Tool objects are collected.
+ * Set II_TOOLS_DIR env var to enable.
+ */
+export async function loadToolsFromDirectory(dirPath: string): Promise<Tool[]> {
+  const { readdirSync } = await import("node:fs");
+  const { join, extname } = await import("node:path");
+  const { pathToFileURL } = await import("node:url");
+  
+  const tools: Tool[] = [];
+  
+  try {
+    const files = readdirSync(dirPath);
+    
+    for (const file of files) {
+      const ext = extname(file);
+      if (ext !== ".ts" && ext !== ".js" && ext !== ".mjs") continue;
+      
+      const filePath = join(dirPath, file);
+      const fileUrl = pathToFileURL(filePath).href;
+      
+      try {
+        const module = await import(fileUrl);
+        
+        // Collect all exported values that look like Tools (have a name property)
+        for (const exported of Object.values(module)) {
+          if (exported && typeof exported === "object" && "name" in exported) {
+            tools.push(exported as Tool);
+          }
+        }
+      } catch (e) {
+        console.error(`Warning: Failed to load tool from ${file}: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    console.error(`Warning: Failed to read tools directory ${dirPath}: ${(e as Error).message}`);
+  }
+  
+  return tools;
+}

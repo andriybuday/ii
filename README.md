@@ -42,8 +42,8 @@ ii> add error handling to the bash tool
 ```
 src/
   types.ts   — Tool interface
-  tools.ts   — read_file, write_file, bash
-  agent.ts   — the agentic loop (~50 lines)
+  tools.ts   — read_file, write_file, bash, edit_file, list_dir
+  agent.ts   — the agentic loop (~80 lines)
   index.ts   — CLI REPL
 ```
 
@@ -56,9 +56,11 @@ The agent loop in `agent.ts` is the whole thing:
 
 ## Adding tools
 
+### Programmatic API
+
 ```ts
-import { Agent } from "./src/agent.js";
-import type { Tool } from "./src/types.js";
+import { Agent } from "ii";
+import type { Tool } from "ii";
 
 const myTool: Tool<{ query: string }> = {
   name: "my_tool",
@@ -76,6 +78,25 @@ const myTool: Tool<{ query: string }> = {
 const agent = new Agent("You are helpful.", [myTool]);
 const reply = await agent.prompt("use my_tool with query hello");
 ```
+
+### Custom Tools Directory
+
+Set `II_TOOLS_DIR` to load tools from a directory:
+
+```bash
+export II_TOOLS_DIR=./tools
+ii
+```
+
+See `tools/` directory for example custom tools (grep, git status/diff).
+
+Each `.ts` or `.js` file in the directory is imported, and all exported Tool objects are registered.
+
+## Environment Variables
+
+- `ANTHROPIC_API_KEY` (required) — Your Anthropic API key
+- `II_MODEL` (optional) — Model to use (default: `claude-sonnet-4-5`)
+- `II_TOOLS_DIR` (optional) — Directory containing custom tool files
 
 ## Requirements
 

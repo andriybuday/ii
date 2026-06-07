@@ -6,6 +6,13 @@
   "bin": {
     "ii": "./dist/index.js"
   },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./agent": "./dist/agent.js",
+    "./tools": "./dist/tools.js",
+    "./types": "./dist/types.js"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
