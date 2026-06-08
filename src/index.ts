@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as readline from "node:readline";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "./agent.js";
@@ -14,8 +14,10 @@ export type { Tool };
 // Run CLI only if this file is executed directly (not imported)
 const isMainModule = (() => {
   try {
-    const modulePath = fileURLToPath(import.meta.url);
-    const scriptPath = process.argv[1] ? resolve(process.argv[1]) : "";
+    const modulePath = realpathSync(fileURLToPath(import.meta.url));
+    // process.argv[1] may be a symlink (e.g. the global `ii` bin created by
+    // `npm link`), so resolve it to its real path before comparing.
+    const scriptPath = process.argv[1] ? realpathSync(resolve(process.argv[1])) : "";
     return modulePath === scriptPath;
   } catch {
     return false;
