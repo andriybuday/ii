@@ -37,6 +37,21 @@ ii> add error handling to the bash tool
 /exit    # quit
 ```
 
+### Skill commands
+
+Drop a skill (a markdown file with `name`/`description` frontmatter, plus a body) at
+`.ii/skills/<name>/SKILL.md` — or `.claude/skills/<name>/SKILL.md` if you already have
+skills from Claude Code — and invoke it as a slash command:
+
+```
+ii> /my-skill some arguments
+```
+
+Text after the name replaces `$ARGUMENTS` in the skill's body. Use `/skill:<name>` to
+reach a skill whose name collides with a built-in command or with a lower-precedence
+skill. See `AGENTS.md`'s "Skill Commands" section for the full discovery/precedence
+rules.
+
 ## Architecture
 
 ```

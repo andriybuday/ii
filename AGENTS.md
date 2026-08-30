@@ -128,10 +128,32 @@ The agent loop is intentionally minimal. Before modifying `src/agent.ts`:
 2. Ask: "Is this essential for safety or core functionality?"
 3. If adding features, consider if they belong in a custom tool instead
 
+### Skill Commands
+
+`ii` discovers skills (plain markdown files with a YAML frontmatter `name`/`description`,
+followed by a body) and lets you invoke them as slash commands:
+
+- `.ii/skills/<name>/SKILL.md` — `ii`-native skills
+- `.claude/skills/<name>/SKILL.md` — Claude Code skills, read as-is for compatibility
+
+Both locations are scanned automatically at startup — no env var or opt-in required.
+Type `/<name>` (or `/skill:<name>`, which always works, even for a name that collides
+with a built-in) to run one; anything typed after the name becomes `$ARGUMENTS` in the
+skill's body. If the same name exists in both locations, `.ii/skills/` always wins. The
+built-in commands (`/clear`, `/exit`, `/quit`) can never be overridden by a skill under
+their bare name — a colliding skill stays reachable via `/skill:<name>`.
+
+**Trust boundary**: a skill's instructions run with `ii`'s full privileges (shell, file
+read/write) the moment its command is typed — same as the trust model already documented
+for `II_TOOLS_DIR` custom tools below. There's no confirmation prompt or opt-in gate;
+only load a project's skills if you trust its contents, the same way you'd trust its
+`AGENTS.md` or any custom tool.
+
 ### Extensibility Changes
 
 The project supports extensibility via:
 - `II_TOOLS_DIR` env var for custom tools
+- `.ii/skills/` and `.claude/skills/` for skill commands (see above)
 - Programmatic API via exports from `src/index.ts`
 - `II_MODEL` env var for model selection
 

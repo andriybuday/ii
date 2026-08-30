@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import { Agent } from "./agent.js";
 import { defaultTools, loadToolsFromDirectory } from "./tools.js";
 import type { Tool } from "./types.js";
+import { discoverSkillsFrom, mergeSkillSources, resolveCommand, substituteArguments } from "./skills.js";
+import type { Skill } from "./skills.js";
 
 // Export for programmatic use
-export { Agent, defaultTools, loadToolsFromDirectory };
-export type { Tool };
+export { Agent, defaultTools, loadToolsFromDirectory, discoverSkillsFrom, mergeSkillSources, resolveCommand, substituteArguments };
+export type { Tool, Skill };
 
 // Run CLI only if this file is executed directly (not imported)
 const isMainModule = (() => {
@@ -69,6 +71,18 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
 
   const agent = new Agent(SYSTEM_PROMPT, tools);
 
+  // Discover skills from .ii/skills/ (ii-native) and .claude/skills/ (Claude Code
+  // compatible). Both are scanned automatically — no opt-in/env var required (FR-012).
+  // .claude/skills is merged first so .ii/skills wins on a name collision (FR-005).
+  const claudeSkills = discoverSkillsFrom(".claude/skills", "claude-compatible");
+  const iiSkills = discoverSkillsFrom(".ii/skills", "ii-native");
+  const skills = mergeSkillSources(claudeSkills, iiSkills);
+  if (skills.size > 0) {
+    console.error(
+      `Loaded ${skills.size} skill(s): ${iiSkills.size} from .ii/skills, ${claudeSkills.size} from .claude/skills`
+    );
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -88,21 +102,30 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
       return;
     }
 
-    if (input === "/exit" || input === "/quit") {
-      process.exit(0);
-    }
+    const resolved = resolveCommand(input, skills);
 
-    if (input === "/clear") {
+    if (resolved.kind === "builtin") {
+      if (resolved.builtinName === "exit" || resolved.builtinName === "quit") {
+        process.exit(0);
+      }
+      // builtinName === "clear"
       agent.clearHistory();
       console.log("History cleared.");
       rl.prompt();
       return;
     }
 
+    // A matched skill's instructions (with arguments substituted) are submitted as an
+    // ordinary turn in the same ongoing history — no new, isolated call (FR-013).
+    const prompt =
+      resolved.kind === "skill"
+        ? substituteArguments(resolved.skill.body, resolved.args)
+        : input; // resolved.kind === "none" — fall through unchanged (FR-010)
+
     try {
       process.stdout.write("\n");
       let firstChunk = true;
-      const response = await agent.prompt(input, (text) => {
+      const response = await agent.prompt(prompt, (text) => {
         if (firstChunk) {
           firstChunk = false;
         }
