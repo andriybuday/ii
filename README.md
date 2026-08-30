@@ -110,6 +110,9 @@ Each `.ts` or `.js` file in the directory is imported, and all exported Tool obj
 ## Environment Variables
 
 - `ANTHROPIC_API_KEY` (required) — Your Anthropic API key
+- `ANTHROPIC_WORKSPACE_ID` (optional) — Required by some identity-linked API keys; if you
+  see `anthropic-workspace-id is required when authenticating with an identity-linked API
+  key`, set this to the workspace ID the request should act in
 - `II_MODEL` (optional) — Model to use (default: `claude-sonnet-4-5`)
 - `II_TOOLS_DIR` (optional) — Directory containing custom tool files
 

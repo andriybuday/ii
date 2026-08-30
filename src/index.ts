@@ -8,6 +8,8 @@ import { defaultTools, loadToolsFromDirectory } from "./tools.js";
 import type { Tool } from "./types.js";
 import { discoverSkillsFrom, mergeSkillSources, resolveCommand, substituteArguments } from "./skills.js";
 import type { Skill } from "./skills.js";
+import { buildCommandRegistry, AutocompleteComponent } from "./autocomplete.js";
+import { UXManager, isAutocompleteEnabled } from "./ux.js";
 
 // Export for programmatic use
 export { Agent, defaultTools, loadToolsFromDirectory, discoverSkillsFrom, mergeSkillSources, resolveCommand, substituteArguments };
@@ -83,6 +85,14 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
     );
   }
 
+  // Build command registry for autocomplete (built-ins + skills, sorted)
+  const registry = buildCommandRegistry(skills);
+
+  // Optional autocomplete wiring — gated on TTY (FR-013 pre-flight)
+  const autocompleteEnabled = isAutocompleteEnabled();
+  let ux: UXManager | null = null;
+  let autocomplete: AutocompleteComponent | null = null;
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -90,12 +100,109 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
     prompt: "\nii> ",
   });
 
+  if (autocompleteEnabled) {
+    try {
+      ux = new UXManager();
+      autocomplete = new AutocompleteComponent(registry, rl, ux);
+      ux.register(autocomplete);
+
+      // readline (terminal: true) registers its own "keypress" listener on
+      // process.stdin during createInterface() above — that listener is what
+      // actually submits the line on Enter, inserts characters, navigates
+      // history on ArrowUp/Down, and inserts a literal tab on Tab. Because it
+      // was registered first, it always ran *before* any listener we add here,
+      // which made it impossible to intercept those keys: Enter had already
+      // submitted the untouched buffer, ArrowUp/Down had already overwritten
+      // it with history, and Tab had already inserted "\t" — autocomplete's own
+      // handling then ran too late, on stale or corrupted state.
+      //
+      // To fix that we detach readline's own listener and drive it ourselves:
+      // our handler runs first, decides whether autocomplete wants to consume
+      // the key, and only forwards to readline's default handling when it
+      // doesn't. This is the standard technique for layering custom key
+      // handling on top of `readline.Interface` without reimplementing it.
+      const defaultKeypressListeners = process.stdin.listeners("keypress").slice() as Array<
+        (str: string, key: { name: string; ctrl?: boolean; shift?: boolean; sequence: string }) => void
+      >;
+      process.stdin.removeAllListeners("keypress");
+
+      const keypressHandler = (str: string, key: { name: string; ctrl?: boolean; shift?: boolean; sequence: string }) => {
+        if (!ux || !autocomplete) {
+          for (const l of defaultKeypressListeners) l.call(process.stdin, str, key);
+          return;
+        }
+        const k = { name: key.name ?? str, ctrl: !!key.ctrl, shift: !!key.shift, sequence: key.sequence ?? str };
+        const line = (rl as unknown as { line: string }).line ?? "";
+        const cursor = (rl as unknown as { cursor: number }).cursor ?? line.length;
+        let consumed = false;
+        try {
+          consumed = ux.onKeypress(k, line, cursor);
+        } catch {
+          consumed = false;
+        }
+        if (!consumed) {
+          for (const l of defaultKeypressListeners) l.call(process.stdin, str, key);
+          // Re-derive buffer state only now that readline's default handling
+          // (character insertion, backspace, history nav, ...) has actually
+          // run, and let the component recompute/render/dismiss accordingly.
+          //
+          // This is skipped when the key was consumed: the component's own
+          // handleKey already decided the resulting `visible`/`selectedIndex`
+          // for that key (e.g. Tab-cycling deliberately places the cursor
+          // right after the completed command + a trailing space, which no
+          // longer looks like a "/" token — probing wantsInput() here would
+          // immediately dismiss the list Tab just drew, breaking cycling).
+          try {
+            const curLine = (rl as unknown as { line: string }).line ?? "";
+            const curCursor = (rl as unknown as { cursor: number }).cursor ?? curLine.length;
+            autocomplete.onLineChange(curLine, curCursor);
+            ux.onLineChange(curLine, curCursor);
+          } catch (e) {
+            console.error(`Warning: Autocomplete disabled: ${(e as Error).message}`);
+            ux.disable("autocomplete");
+          }
+        }
+      };
+      process.stdin.on("keypress", keypressHandler);
+
+      // Terminal resize — re-render with new width (no recompute needed)
+      const resizeHandler = () => {
+        try {
+          ux?.onResize();
+        } catch (e) {
+          console.error(`Warning: Autocomplete disabled: ${(e as Error).message}`);
+          ux?.disable("autocomplete");
+        }
+      };
+      process.stdout.on("resize", resizeHandler);
+
+      // Teardown on close — remove listeners, clear suggestions, restore readline's own handling
+      rl.on("close", () => {
+        try {
+          process.stdin.off("keypress", keypressHandler);
+          process.stdout.off("resize", resizeHandler);
+          autocomplete?.dismiss();
+        } catch {}
+      });
+    } catch (e) {
+      console.error(`Warning: Autocomplete disabled: ${(e as Error).message}`);
+      // Leave autocomplete disabled; REPL falls back to plain readline (FR-013)
+      ux = null;
+      autocomplete = null;
+    }
+  }
+
   console.log("ii — minimalist AI coding agent  (type /exit to quit, /clear to reset)\n");
 
   rl.prompt();
 
   rl.on("line", async (line) => {
     const input = line.trim();
+
+    // Clear bottom suggestions before handling line (so old block doesn't linger above new output)
+    if (autocomplete) {
+      try { autocomplete.dismiss(); } catch {}
+    }
 
     if (!input) {
       rl.prompt();

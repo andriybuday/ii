@@ -3,9 +3,18 @@ import type { Tool } from "./types.js";
 
 const MODEL = process.env.II_MODEL || "claude-sonnet-4-5";
 
+// Some API keys are identity-linked (tied to a person across multiple workspaces) rather
+// than workspace-scoped, and the API rejects requests from them unless told which
+// workspace to act in. The SDK only attaches `anthropic-workspace-id` automatically for
+// its OAuth/federation credential chain, not for plain API-key auth, so we forward it
+// ourselves when set.
+const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+
 export class Agent {
   private history: Anthropic.MessageParam[] = [];
-  private client = new Anthropic();
+  private client = new Anthropic(
+    workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}
+  );
   private readonly MAX_ITERATIONS = 50;
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
