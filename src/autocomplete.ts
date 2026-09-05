@@ -116,7 +116,7 @@ export function truncateDescription(desc: string, maxWidth: number): string {
 // readline believes it left it, so readline's own redraw stays in sync.
 // ---------------------------------------------------------------------------
 
-const MAX_VISIBLE_SUGGESTIONS = 10;
+const MAX_VISIBLE_SUGGESTIONS = 5;
 
 function rlOutput(rl: readline.Interface): NodeJS.WriteStream {
   return (rl as unknown as { output: NodeJS.WriteStream }).output ?? process.stdout;
@@ -162,16 +162,24 @@ export function renderSuggestions(
   }
   const cols = availableColumns();
   let visible = matches;
+  let start = 0;
   let extra = 0;
   if (matches.length > MAX_VISIBLE_SUGGESTIONS) {
-    visible = matches.slice(0, MAX_VISIBLE_SUGGESTIONS - 1);
-    extra = matches.length - visible.length;
+    // Reserve one row for the overflow hint so total rows never exceed
+    // MAX_VISIBLE_SUGGESTIONS. Scroll the window so selectedIndex stays visible.
+    const capacity = MAX_VISIBLE_SUGGESTIONS - 1;
+    extra = matches.length - capacity;
+    if (selectedIndex >= capacity) {
+      start = Math.min(selectedIndex - capacity + 1, matches.length - capacity);
+    }
+    visible = matches.slice(start, start + capacity);
   }
   const lines = visible.map((entry, i) => {
+    const globalIndex = start + i;
     const avail = Math.max(0, cols - entry.qualifiedName.length - 3);
     const trunc = truncateDescription(entry.description, avail);
     const row = formatRow(entry, trunc, cols);
-    return i === selectedIndex ? `\x1b[7m› ${row}\x1b[27m` : `  ${row}`;
+    return globalIndex === selectedIndex ? `\x1b[7m› ${row}\x1b[27m` : `  ${row}`;
   });
   if (extra > 0) lines.push(`  … and ${extra} more`);
 
