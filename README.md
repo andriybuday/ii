@@ -23,9 +23,11 @@ npm link   # makes `ii` available globally
 Or run directly:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
 npm run dev
 ```
+
+On first run, use `/model` to pick a model — you will be securely prompted for
+that provider's API key, which is stored in `~/.ii/credentials.json` (0600).
 
 ## Usage
 
@@ -35,7 +37,12 @@ ii> read src/agent.ts and explain the loop
 ii> add error handling to the bash tool
 /clear   # reset conversation history
 /exit    # quit
+/model                # list available models (marks the current one)
+/model muse-spark-1.3 # switch to Meta Muse Spark 1.3 (takes effect immediately)
 ```
+
+Model choice persists in `~/.ii/model.json`; both provider keys live in
+`~/.ii/credentials.json` and are never read from the environment.
 
 ### Skill commands
 
@@ -109,14 +116,21 @@ Each `.ts` or `.js` file in the directory is imported, and all exported Tool obj
 
 ## Environment Variables
 
-- `ANTHROPIC_API_KEY` (required) — Your Anthropic API key
 - `ANTHROPIC_WORKSPACE_ID` (optional) — Required by some identity-linked API keys; if you
   see `anthropic-workspace-id is required when authenticating with an identity-linked API
   key`, set this to the workspace ID the request should act in
-- `II_MODEL` (optional) — Model to use (default: `claude-sonnet-4-5`)
 - `II_TOOLS_DIR` (optional) — Directory containing custom tool files
+
+Provider API keys are NOT read from the environment — `/model` prompts for them
+securely and stores them in `~/.ii/credentials.json` (0600).
+
+### Migrating from older versions
+
+- `II_MODEL` is removed; run `/model` to pick a model (persisted in `~/.ii/model.json`).
+- `ANTHROPIC_API_KEY` via env is ignored; run `/model`, select the Anthropic model,
+  and enter the key at the secure prompt to store it in `~/.ii/credentials.json`.
 
 ## Requirements
 
 - Node.js >= 20
-- `ANTHROPIC_API_KEY` environment variable
+- A provider API key (provisioned via `/model` on first run)

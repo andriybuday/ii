@@ -24,6 +24,7 @@ const BUILTIN_DESCRIPTIONS: Record<string, string> = {
   clear: "Clear conversation history",
   exit: "Exit the agent",
   quit: "Exit the agent",
+  model: "List models or switch the active model",
 };
 
 export function buildCommandRegistry(skills: Map<string, Skill>): CommandEntry[] {

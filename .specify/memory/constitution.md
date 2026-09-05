@@ -1,9 +1,29 @@
 <!--
 SYNC IMPACT REPORT
-Version change: 1.1.0 → 1.2.0
-Rationale: MINOR bump — materially expanded guidance across four existing principles and
-one existing section, no principle removed or redefined incompatibly. Folds in gaps found
-by re-reading the full commit history and tools/README.md that weren't yet captured.
+Version change: 1.2.0 → 2.0.0
+Rationale: MAJOR bump — redefines Principle IV to sanction the single exception it
+previously forbade: user-scoped interactive state (model preference + credentials
+under `~/.ii/`) MAY persist in files instead of env vars, driven by explicit user
+direction across three `/speckit-clarify` rounds (secrets must not traverse shell
+history or the environment). All other principles untouched.
+Modified principles:
+  - IV. No Feature Creep, Opt-In Extensibility — env-only config now exempts
+    `~/.ii/` preference (readable) + credentials (0600, never logged); examples
+    updated (`II_MODEL` removed by feature 003).
+Modified sections:
+  - Technology & Compatibility Constraints — no change (provider SDK rule stands;
+    Meta path uses `fetch`, no new dependency).
+Added sections: none
+Removed sections: none
+Deferred placeholders: none
+Templates requiring downstream review (not modified by this command; see Scope Guard):
+  - .specify/templates/ (plan/spec/tasks scaffolds) — confirm alignment with principles above
+Follow-up TODOs: none
+
+Prior report (1.2.0): MINOR bump — materially expanded guidance across four existing
+principles and one existing section, no principle removed or redefined
+incompatibly. Folds in gaps found by re-reading the full commit history and
+tools/README.md that weren't yet captured.
 Modified principles:
   - I. Radical Minimalism — added a clause on AGENTS.md's token-budget cost since it is
     loaded into every system prompt at startup.
@@ -101,9 +121,12 @@ detection, API error handling to prevent crashes, the max-iterations limit, and 
 ### IV. No Feature Creep, Opt-In Extensibility
 The core MUST NOT grow config-file parsing, complex CLI argument parsing, conversation
 persistence, multi-agent coordination, or streaming-UI complexity. Configuration MUST be
-exposed through environment variables (e.g., `II_MODEL`, `II_TOOLS_DIR`), never through
-config files. Extensibility mechanisms MUST be opt-in and MUST NOT change default
-behavior when unused.
+exposed through environment variables (e.g., `II_TOOLS_DIR`), never through config
+files — with one sanctioned exception: user-scoped interactive state (model preference
+and credentials that must not traverse shell history or the environment) MAY persist in
+files under `~/.ii/` (preference readable; credentials file `0600`, values never
+logged). This is the sole exception to env-only config. Extensibility mechanisms MUST
+be opt-in and MUST NOT change default behavior when unused.
 **Rationale**: Lifted directly from AGENTS.md's "What NOT to Do" and "Extensibility
 Changes" sections — this is the project's own pre-existing, explicit governance intent,
 now made binding.
@@ -173,4 +196,4 @@ this file in the same change.
 - **MINOR**: a new principle or section, or materially expanded guidance.
 - **PATCH**: wording, typo, or clarification fixes with no semantic change.
 
-**Version**: 1.2.0 | **Ratified**: 2026-08-30 | **Last Amended**: 2026-08-30
+**Version**: 2.0.0 | **Ratified**: 2026-08-30 | **Last Amended**: 2026-09-05

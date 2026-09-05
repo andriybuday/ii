@@ -155,11 +155,11 @@ The project supports extensibility via:
 - `II_TOOLS_DIR` env var for custom tools
 - `.ii/skills/` and `.claude/skills/` for skill commands (see above)
 - Programmatic API via exports from `src/index.ts`
-- `II_MODEL` env var for model selection
+- `/model` command with `~/.ii/` preference + credentials files for model selection (sole sanctioned exception to env-only config per constitution Principle IV)
 
 When adding extensibility features:
 - Keep them opt-in (don't change default behavior)
-- Use environment variables, not config files
+- Use environment variables, not config files (except the sanctioned `~/.ii/` user-scope exception in the constitution)
 - Document in README.md and tools/README.md
 
 ## Commit Guidelines
@@ -209,7 +209,7 @@ The system prompt is in `src/index.ts`. Keep it concise and focused on the minim
 
 ## What NOT to Do
 
-- Do NOT add config file parsing (use env vars)
+- Do NOT add config file parsing (use env vars; sole exception: `~/.ii/` user scope per constitution Principle IV)
 - Do NOT add complex CLI argument parsing (keep it simple)
 - Do NOT add conversation persistence (history is in-memory only)
 - Do NOT add multiple agent coordination

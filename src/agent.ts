@@ -1,117 +1,77 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Tool } from "./types.js";
-
-const MODEL = process.env.II_MODEL || "claude-sonnet-4-5";
-
-// Some API keys are identity-linked (tied to a person across multiple workspaces) rather
-// than workspace-scoped, and the API rejects requests from them unless told which
-// workspace to act in. The SDK only attaches `anthropic-workspace-id` automatically for
-// its OAuth/federation credential chain, not for plain API-key auth, so we forward it
-// ourselves when set.
-const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+import type { ClientResponse, ModelClient, NeutralMessage } from "./clients.js";
+import { AnthropicClient, AuthError } from "./clients.js";
+import { defaultModel } from "./models.js";
 
 export class Agent {
-  private history: Anthropic.MessageParam[] = [];
-  private client = new Anthropic(
-    workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}
-  );
+  private history: NeutralMessage[] = [];
   private readonly MAX_ITERATIONS = 50;
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
+  private pendingAuth: string | null = null;
 
   constructor(
     private systemPrompt: string,
-    private tools: Tool[] = []
+    private tools: Tool[] = [],
+    private client: ModelClient = new AnthropicClient(),
+    private model: string = defaultModel.id,
+    private apiKey: string = ""
   ) {}
 
-  async prompt(
-    userMessage: string,
-    onText?: (delta: string) => void
-  ): Promise<string> {
-    this.history.push({ role: "user", content: userMessage });
+  setClient(client: ModelClient, model: string, apiKey: string) {
+    this.client = client;
+    this.model = model;
+    this.apiKey = apiKey;
+    this.pendingAuth = null;
+  }
+
+  /** Provider name when the last turn failed on credentials, else null. */
+  consumeAuthFailure(): string | null {
+    const p = this.pendingAuth;
+    this.pendingAuth = null;
+    return p;
+  }
+
+  async prompt(userMessage: string, onText?: (delta: string) => void): Promise<string> {
+    this.history.push({ role: "user", text: userMessage });
 
     for (let i = 0; i < this.MAX_ITERATIONS; i++) {
-      let response: Anthropic.Message;
+      let response: ClientResponse;
       try {
-        response = await this.client.messages.create({
-          model: MODEL,
-          max_tokens: 8096,
-          system: this.systemPrompt,
-          messages: this.history,
-          tools: this.tools.map((t) => ({
-            name: t.name,
-            description: t.description,
-            input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
-          })),
+        response = await this.client.complete({
+          model: this.model, key: this.apiKey, system: this.systemPrompt,
+          history: this.history, tools: this.tools, maxTokens: 8096,
         });
       } catch (e) {
+        if (e instanceof AuthError) this.pendingAuth = e.provider;
         const errorMsg = `API Error: ${(e as Error).message}`;
-        this.history.push({ role: "assistant", content: errorMsg });
+        this.history.push({ role: "assistant", text: errorMsg });
         onText?.(errorMsg);
         return errorMsg;
       }
 
-      // Track token usage
-      if (response.usage) {
-        this.totalInputTokens += response.usage.input_tokens;
-        this.totalOutputTokens += response.usage.output_tokens;
-        console.error(`[tokens] input: ${response.usage.input_tokens}, output: ${response.usage.output_tokens}, total: ${this.totalInputTokens + this.totalOutputTokens}`);
-      }
+      this.totalInputTokens += response.usage.input;
+      this.totalOutputTokens += response.usage.output;
+      console.error(`[tokens] input: ${response.usage.input}, output: ${response.usage.output}, total: ${this.totalInputTokens + this.totalOutputTokens}`);
 
-      this.history.push({ role: "assistant", content: response.content });
+      this.history.push({ role: "assistant", text: response.text, toolUses: response.toolUses });
+      if (response.text) onText?.(response.text);
+      if (response.stop === "end_turn") return response.text;
 
-      if (response.stop_reason === "end_turn") {
-        const text = response.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("");
-        onText?.(text);
-        return text;
-      }
-
-      if (response.stop_reason === "tool_use") {
-        const toolUseBlocks = response.content.filter(
-          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-        );
-
-        // Emit any text alongside tool calls
-        const textSoFar = response.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("");
-        if (textSoFar) onText?.(textSoFar);
-
-        const toolResults = await Promise.all(
-          toolUseBlocks.map(async (block) => {
-            const tool = this.tools.find((t) => t.name === block.name);
-            if (!tool) {
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: `Tool "${block.name}" not found`,
-                is_error: true,
-              };
-            }
-            try {
-              const result = await tool.execute(block.input as never);
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: result,
-              };
-            } catch (e) {
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: `Tool execution error: ${(e as Error).message}`,
-                is_error: true,
-              };
-            }
-          })
-        );
-
-        this.history.push({ role: "user", content: toolResults });
-      }
+      const toolResults = await Promise.all(
+        response.toolUses.map(async (block) => {
+          const tool = this.tools.find((t) => t.name === block.name);
+          if (!tool) {
+            return { type: "tool_result" as const, tool_use_id: block.id, content: `Tool "${block.name}" not found`, is_error: true };
+          }
+          try {
+            return { type: "tool_result" as const, tool_use_id: block.id, content: await tool.execute(block.input as never) };
+          } catch (e) {
+            return { type: "tool_result" as const, tool_use_id: block.id, content: `Tool execution error: ${(e as Error).message}`, is_error: true };
+          }
+        })
+      );
+      this.history.push({ role: "user", toolResults });
     }
 
     throw new Error(`Agent exceeded maximum iterations (${this.MAX_ITERATIONS}). The model may be stuck in a loop.`);
@@ -121,13 +81,10 @@ export class Agent {
     this.history = [];
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
+    this.pendingAuth = null;
   }
 
   getTokenUsage() {
-    return {
-      inputTokens: this.totalInputTokens,
-      outputTokens: this.totalOutputTokens,
-      totalTokens: this.totalInputTokens + this.totalOutputTokens,
-    };
+    return { inputTokens: this.totalInputTokens, outputTokens: this.totalOutputTokens, totalTokens: this.totalInputTokens + this.totalOutputTokens };
   }
 }

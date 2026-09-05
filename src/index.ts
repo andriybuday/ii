@@ -4,6 +4,12 @@ import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "./agent.js";
+import { AnthropicClient, MetaClient } from "./clients.js";
+import type { ModelClient } from "./clients.js";
+import { defaultModel, findModel, models } from "./models.js";
+import type { ModelEntry } from "./models.js";
+import { loadCredentials, loadPreference, saveCredential, savePreference } from "./config.js";
+import type { ProviderName } from "./config.js";
 import { defaultTools, loadToolsFromDirectory } from "./tools.js";
 import type { Tool } from "./types.js";
 import { discoverSkillsFrom, mergeSkillSources, resolveCommand, substituteArguments } from "./skills.js";
@@ -71,7 +77,120 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
     }
   }
 
-  const agent = new Agent(SYSTEM_PROMPT, tools);
+  // Active model: persisted ~/.ii/ preference, else the registry default.
+  // Legacy II_MODEL / env-provided keys are never consulted (removed).
+  function clientFor(provider: ProviderName): ModelClient {
+    return provider === "meta" ? new MetaClient() : new AnthropicClient();
+  }
+  function keyFor(provider: ProviderName): string {
+    return loadCredentials().credentials[provider] ?? "";
+  }
+
+  let currentEntry: ModelEntry = defaultModel;
+  const { current: savedId, error: prefError } = loadPreference();
+  if (prefError) {
+    console.error(`Warning: ${prefError} Using default model.`);
+  } else if (savedId) {
+    const found = findModel(savedId);
+    if (found) {
+      currentEntry = found;
+    } else {
+      console.error(`Warning: Unknown model "${savedId}" in ~/.ii/model.json. Using default model.`);
+    }
+  }
+
+  const agent = new Agent(SYSTEM_PROMPT, tools, clientFor(currentEntry.provider), currentEntry.id, keyFor(currentEntry.provider));
+
+  function switchModel(entry: ModelEntry) {
+    currentEntry = entry;
+    agent.setClient(clientFor(entry.provider), entry.id, keyFor(entry.provider));
+  }
+
+  // Secure non-echoing prompt for API keys (never touches shell history or the
+  // model). Detaches stdin "keypress" listeners so readline can neither render
+  // (echo) nor submit the typed secret as a chat line; extra lines typed ahead
+  // past the secret are replayed through the normal handler afterwards.
+  function promptHidden(query: string): Promise<string> {
+    return new Promise((resolve) => {
+      process.stdout.write(query);
+      const stdin = process.stdin;
+      const savedKeypress = stdin.listeners("keypress").slice() as ((...args: any[]) => void)[];
+      stdin.removeAllListeners("keypress");
+      if (stdin.isTTY) stdin.setRawMode(true);
+      let buffer = "";
+      let esc = false;
+      const replay: string[] = [];
+      const done = (value: string, tail = "") => {
+        for (const line of tail.split(/\r\n|\r|\n/)) {
+          if (line) replay.push(line);
+        }
+        stdin.off("data", onData);
+        for (const l of savedKeypress) stdin.on("keypress", l);
+        if (stdin.isTTY) stdin.setRawMode(false);
+        process.stdout.write("\n");
+        resolve(value);
+        for (const line of replay) void handleLine(line);
+      };
+      const onData = (chunk: Buffer) => {
+        const s = chunk.toString("utf-8");
+        for (let i = 0; i < s.length; i++) {
+          const ch = s[i];
+          if (esc) {
+            if (/[a-zA-Z]/.test(ch)) esc = false;
+            continue;
+          }
+          if (ch === "\u001b") { esc = true; continue; }
+          if (ch === "\r" || ch === "\n") {
+            const value = buffer;
+            buffer = "";
+            return done(value, s.slice(i + 1));
+          }
+          if (ch === "\u0003" || ch === "\u0004") { buffer = ""; return done(""); } // Ctrl-C/D cancels
+          if (ch === "\u007f" || ch === "\b") buffer = buffer.slice(0, -1);
+          else if (ch >= " ") buffer += ch;
+        }
+      };
+      stdin.on("data", onData);
+    });
+  }
+
+  async function ensureKey(entry: ModelEntry): Promise<boolean> {
+    if (keyFor(entry.provider)) return true;
+    const key = await promptHidden(`Enter ${entry.provider} API key: `);
+    if (!key) {
+      console.log("Cancelled.");
+      return false;
+    }
+    const err = saveCredential(entry.provider, key);
+    if (err) {
+      console.error(err);
+      return false;
+    }
+    console.log("Saved.");
+    return true;
+  }
+
+  async function handleModelCommand(args: string) {
+    if (!args) {
+      for (const m of models) {
+        console.log(`${m.id === currentEntry.id ? "*" : " "} ${m.id} — ${m.label}`);
+      }
+      return;
+    }
+    const entry = findModel(args);
+    if (!entry) {
+      console.log(`Unknown model "${args}". Available: ${models.map((m) => m.id).join(", ")}.`);
+      return;
+    }
+    if (!(await ensureKey(entry))) return;
+    const err = savePreference(entry.id);
+    if (err) {
+      console.error(err);
+      return;
+    }
+    switchModel(entry);
+    console.log(`Switched to ${entry.id} (${entry.label}).`);
+  }
 
   // Discover skills from .ii/skills/ (ii-native) and .claude/skills/ (Claude Code
   // compatible). Both are scanned automatically — no opt-in/env var required (FR-012).
@@ -192,11 +311,15 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
     }
   }
 
-  console.log("ii — minimalist AI coding agent  (type /exit to quit, /clear to reset)\n");
+  console.log(`ii — minimalist AI coding agent  [model: ${currentEntry.id}]  (type /exit to quit, /clear to reset, /model to switch)\n`);
 
   rl.prompt();
 
-  rl.on("line", async (line) => {
+  rl.on("line", (line) => {
+    void handleLine(line);
+  });
+
+  async function handleLine(line: string) {
     const input = line.trim();
 
     // Clear bottom suggestions before handling line (so old block doesn't linger above new output)
@@ -205,6 +328,13 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
     }
 
     if (!input) {
+      rl.prompt();
+      return;
+    }
+
+    // /model is a reserved builtin with arguments — handle before skill resolution.
+    if (input === "/model" || input.startsWith("/model ")) {
+      await handleModelCommand(input.slice("/model".length).trim());
       rl.prompt();
       return;
     }
@@ -240,12 +370,28 @@ Be concise. Use tools to inspect and modify code directly rather than explaining
       });
       if (!response) process.stdout.write("(done)");
       process.stdout.write("\n");
+      // Credential failure: securely re-prompt for the failed provider's key.
+      const authProvider = agent.consumeAuthFailure();
+      if (authProvider) {
+        const key = await promptHidden(`Enter ${authProvider} API key: `);
+        if (key) {
+          const err = saveCredential(authProvider as ProviderName, key);
+          if (err) {
+            console.error(err);
+          } else {
+            switchModel(currentEntry);
+            console.log("Saved. Retry your prompt.");
+          }
+        } else {
+          console.log("Cancelled.");
+        }
+      }
     } catch (e) {
       console.error("Error:", (e as Error).message);
     }
 
     rl.prompt();
-  });
+  }
 
   rl.on("close", () => {
     console.log("\nBye.");

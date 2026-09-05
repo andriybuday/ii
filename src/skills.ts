@@ -21,7 +21,7 @@ export interface Skill {
 }
 
 /** Built-in command names a skill may never override under its bare form (FR-005a). */
-export const RESERVED_COMMAND_NAMES = new Set(["clear", "exit", "quit"]);
+export const RESERVED_COMMAND_NAMES = new Set(["clear", "exit", "quit", "model"]);
 
 /**
  * Resolve `<baseDir>/<name>/SKILL.md`, rejecting any path that would escape `baseDir`
