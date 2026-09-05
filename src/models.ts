@@ -7,8 +7,8 @@ export interface ModelEntry {
 }
 
 export const models: ModelEntry[] = [
-  { id: "claude-sonnet-4-5", label: "Anthropic Claude Sonnet (default)", provider: "anthropic", default: true },
-  { id: "muse-spark-1.3", label: "Meta Muse Spark 1.3", provider: "meta", default: false },
+  { id: "claude-sonnet-4-5", label: "Anthropic Claude Sonnet", provider: "anthropic", default: false },
+  { id: "muse-spark-1.3-contributor", label: "Meta Muse Spark 1.3 Contributor (default)", provider: "meta", default: true },
 ];
 
 export const defaultModel: ModelEntry = models.find((m) => m.default) ?? models[0];

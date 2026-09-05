@@ -38,7 +38,7 @@ ii> add error handling to the bash tool
 /clear   # reset conversation history
 /exit    # quit
 /model                # list available models (marks the current one)
-/model muse-spark-1.3 # switch to Meta Muse Spark 1.3 (takes effect immediately)
+/model muse-spark-1.3-contributor # switch to Meta Muse Spark 1.3 Contributor (takes effect immediately)
 ```
 
 Model choice persists in `~/.ii/model.json`; both provider keys live in
